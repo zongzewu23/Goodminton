@@ -87,6 +87,10 @@ data/processed/features/*.pkl
 !data/processed/keypoints/.gitkeep
 !data/processed/features/.gitkeep
 
+*.joblib
+
+*.csv
+
 # ===== MODEL FILES =====
 models/*.pkl
 models/*.h5
