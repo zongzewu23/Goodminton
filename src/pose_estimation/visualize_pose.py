@@ -2,18 +2,18 @@ import cv2
 import mediapipe as mp
 import os
 
-# 初始化MediaPipe Pose
+# Initialize MediaPipe Pose
 mp_pose = mp.solutions.pose
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 
 def visualize_video(input_path, output_path):
     """
-    在视频上绘制MediaPipe姿态关键点
+    Draw MediaPipe pose landmarks on the video
     
     Args:
-        input_path: 输入视频路径
-        output_path: 输出视频路径（带骨架标注）
+        input_path: input video path
+        output_path: output video path (with skeleton rendering)
     """
     cap = cv2.VideoCapture(input_path)
     

@@ -24,7 +24,7 @@ MODELS_DIR = PROJECT_ROOT / "models"
 
 def make_svm_pipeline() -> GridSearchCV:
     """
-    构造一个带 GridSearch 的 SVM 分类器 (带 StandardScaler)。
+    Build an SVM classifier with StandardScaler and GridSearch.
     """
     pipe = Pipeline(
         steps=[
@@ -54,7 +54,7 @@ def make_svm_pipeline() -> GridSearchCV:
 
 def make_rf_model() -> GridSearchCV:
     """
-    构造一个带 GridSearch 的 RandomForest 分类器。
+    Build a RandomForest classifier with GridSearch.
     """
     rf = RandomForestClassifier(random_state=42)
 
@@ -85,11 +85,11 @@ def make_rf_model() -> GridSearchCV:
 
 def train_and_evaluate(model_type: str = "svm") -> None:
     """
-    主训练入口：
-      - 从 CSV 构造数据集
-      - 交叉验证挑超参数
-      - 输出分类报告
-      - 保存最佳模型到 models/
+    Main training entry:
+      - Build dataset from CSV
+      - Cross-validated hyperparameter search
+      - Print classification report
+      - Save best model to models/
     """
     features_path = DATA_PROCESSED_DIR / "features.csv"
     labels_path = DATA_PROCESSED_DIR / "labels.csv"
@@ -107,21 +107,21 @@ def train_and_evaluate(model_type: str = "svm") -> None:
     else:
         raise ValueError(f"Unsupported model_type: {model_type}")
 
-    # 交叉验证 + 选择最佳参数
+    # Cross-validation + select best hyperparameters
     print(f"[INFO] Starting GridSearchCV for {model_type} ...")
     grid.fit(X, y)
 
     print(f"[INFO] Best CV accuracy: {grid.best_score_:.4f}")
     print(f"[INFO] Best params: {grid.best_params_}")
 
-    # 用交叉验证方式得到整套数据上的预测结果，做一个大致报告
+    # Get cross-validated predictions on the full dataset and print a summary report
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     y_pred = cross_val_predict(grid.best_estimator_, X, y, cv=cv)
 
     print("[INFO] Cross-validated classification report:")
     print(classification_report(y, y_pred, target_names=["incorrect", "correct"]))
 
-    # 保存模型
+    # Save the model
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     model_path = MODELS_DIR / model_name
     joblib.dump(grid.best_estimator_, model_path)

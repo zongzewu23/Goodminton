@@ -24,107 +24,72 @@ MODELS_DIR = PROJECT_ROOT / "models"
 
 def make_lr_pca_pipeline() -> GridSearchCV:
     """
-    构造一个：StandardScaler -> PCA -> LogisticRegression 的 Pipeline，
-    再用 GridSearchCV 做超参数搜索。
+    Build a Pipeline: StandardScaler -> PCA -> LogisticRegression,
+    then use GridSearchCV for hyperparameter search.
 
-    这里通过：
-      - PCA 降维（减少特征数，缓解过拟合）
-      - LogisticRegression + 强正则（小 C）简化模型复杂度
+    Approach:
+      - PCA for dimensionality reduction (fewer features, less overfitting)
+      - LogisticRegression with stronger regularization (small C) to reduce model complexity
     """
-    pipe = Pipeline(
-        steps=[
-            ("scaler", StandardScaler()),
-            ("pca", PCA()),  # 具体 n_components 通过网格搜索来定
-            (
-                "clf",
-                LogisticRegression(
-                    penalty="l2",
-                    solver="lbfgs",
-                    max_iter=2000,
-                    class_weight=None,  # 如果以后想平衡类别，可以改为 "balanced"
-                ),
-            ),
-        ]
-    )
+    scaler = StandardScaler()
+    pca = PCA()  # n_components determined via grid search
+    clf = LogisticRegression(max_iter=2000, solver="lbfgs", class_weight=None)  # set to 'balanced' if class balancing is desired later
 
-    # 超参数网格：
-    # - pca__n_components: 可以是主成分数（整数），也可以是保留方差比例（浮点数）
-    #   这里我们试两种：保留 90% / 95% 方差，或者直接压到 20 / 40 维
-    # - clf__C: 正则强度，越小越“保守”，越不容易过拟合
+    pipe = Pipeline(steps=[("scaler", scaler), ("pca", pca), ("clf", clf)])
+
+    # Hyperparameter grid:
+    # - pca__n_components: number of components (int) or variance ratio (float)
+    #   Try two styles: keep 90%/95% variance, or reduce to 20/40 dims
+    # - clf__C: regularization strength; smaller C is more conservative and less prone to overfitting
     param_grid = {
         "pca__n_components": [0.90, 0.95, 20, 40],
-        "clf__C": [0.01, 0.1, 1.0],
+        "clf__C": [0.01, 0.05, 0.1, 0.2, 0.5],
     }
 
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-    grid = GridSearchCV(
-        estimator=pipe,
-        param_grid=param_grid,
-        cv=cv,
-        scoring="accuracy",
-        n_jobs=-1,
-        verbose=1,
-    )
+    grid = GridSearchCV(pipe, param_grid=param_grid, scoring="f1", cv=5, n_jobs=-1, verbose=1)
     return grid
 
 
-def train_and_evaluate_lr_pca() -> None:
+def train_and_evaluate_lr_pca(features_path: Path, labels_path: Path, save_model_path: Path) -> None:
     """
-    主训练入口：
-      - 从 CSV 构造数据集 (X, y)
-      - 用 LogisticRegression + PCA 做 GridSearchCV
-      - 打印交叉验证分类报告
-      - 保存最佳模型到 models/clear_classifier_lr_pca.joblib
+    Main training entry:
+      - Build dataset from CSV (X, y)
+      - GridSearchCV with LogisticRegression + PCA
+      - Print CV classification report
+      - Save best model to models/clear_classifier_lr_pca.joblib
     """
-    features_path = DATA_PROCESSED_DIR / "features.csv"
-    labels_path = DATA_PROCESSED_DIR / "labels.csv"
-
-    print(f"[INFO] Loading dataset from:\n  {features_path}\n  {labels_path}")
     X, y, names = build_dataset_from_csv(features_path, labels_path)
-    print(f"[INFO] Dataset built: {X.shape[0]} videos, {X.shape[1]} features.")
 
     grid = make_lr_pca_pipeline()
-
-    print("[INFO] Starting GridSearchCV for LogisticRegression + PCA ...")
     grid.fit(X, y)
 
-    print(f"[INFO] Best CV accuracy: {grid.best_score_:.4f}")
-    print(f"[INFO] Best params: {grid.best_params_}")
-
-    # 用最佳模型做一次交叉验证预测，看看整体表现
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     best_model = grid.best_estimator_
-    y_pred = cross_val_predict(best_model, X, y, cv=cv)
+    print("Best params:", grid.best_params_)
 
-    print("[INFO] Cross-validated classification report (LogReg + PCA):")
-    print(
-        classification_report(
-            y,
-            y_pred,
-            target_names=["incorrect", "correct"],
-            digits=4,
-        )
-    )
+    # Use the best model to perform cross-validated predictions to see overall performance
+    y_pred = cross_val_predict(best_model, X, y, cv=5, n_jobs=-1)
+    print(classification_report(y, y_pred))
 
-    # 保存最佳模型
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    model_path = MODELS_DIR / "clear_classifier_lr_pca.joblib"
-    joblib.dump(best_model, model_path)
-    print(f"[INFO] Saved best Logistic+PCA model to: {model_path}")
+    # Save the best model
+    save_model_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(best_model, save_model_path)
+    print(f"Saved LogisticRegression+PCA model to {save_model_path}")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description=(
-            "Train a badminton clear-classifier (correct vs incorrect) "
-            "using Logistic Regression + PCA to reduce overfitting."
-        )
-    )
-    # 目前这个脚本只有一种模型方式，如果以后想扩展，就在这里加参数
-    _ = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--features_csv", type=str, required=True)
+    parser.add_argument("--labels_csv", type=str, required=True)
+    parser.add_argument("--save_model", type=str, default=str(Path("models/clear_classifier_lr_pca.joblib")))
+    # Currently this script supports a single modeling approach; add args here if expanding later
 
-    train_and_evaluate_lr_pca()
+    args = parser.parse_args()
+
+    features_path = Path(args.features_csv)
+    labels_path = Path(args.labels_csv)
+    save_model_path = Path(args.save_model)
+
+    train_and_evaluate_lr_pca(features_path, labels_path, save_model_path)
 
 
 if __name__ == "__main__":

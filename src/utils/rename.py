@@ -3,13 +3,13 @@ from pathlib import Path
 
 def batch_rename_videos(folder_path, prefix="clear_inc", start_num=1, extension=".mp4"):
     """
-    批量重命名视频文件
+    Batch rename video files
     
     Args:
-        folder_path: 文件夹路径
-        prefix: 文件名前缀
-        start_num: 起始编号
-        extension: 文件扩展名
+        folder_path: directory path
+        prefix: filename prefix
+        start_num: starting number
+        extension: file extension
     """
     folder = Path(folder_path)
     

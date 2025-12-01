@@ -28,8 +28,8 @@ def predict_with_threshold(
     print_report: bool = True,
 ) -> None:
     """
-    使用给定模型 + 自定义阈值，对 features/labels CSV 中的每个视频做预测。
-    阈值作用在 P(correct) 上：P(correct) >= threshold -> correct，否则 incorrect。
+    Predict each video in features/labels CSV using the given model and a custom threshold.
+    Threshold applies to P(correct): P(correct) >= threshold -> correct, else incorrect.
     """
     if not features_path.exists():
         raise FileNotFoundError(f"features.csv not found at {features_path}")
@@ -55,7 +55,7 @@ def predict_with_threshold(
     proba = model.predict_proba(X)  # shape (N, 2), labels assumed [0, 1] = [incorrect, correct]
     prob_correct = proba[:, 1]
 
-    # 应用自定义阈值
+    # Apply custom threshold
     y_pred = (prob_correct >= threshold).astype(int)
 
     print("\nPer-video prediction result (with threshold):")

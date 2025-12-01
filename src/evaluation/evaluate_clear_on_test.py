@@ -21,7 +21,7 @@ def evaluate_test_with_threshold(
     threshold: float = 0.4,
 ) -> None:
     """
-    在专门的 TEST CSV 上进行评估，使用自定义阈值作用在 P(correct) 上。
+    Evaluate on dedicated TEST CSV using a custom threshold applied to P(correct).
     """
     if not features_path.exists():
         raise FileNotFoundError(f"Test features.csv not found at {features_path}")

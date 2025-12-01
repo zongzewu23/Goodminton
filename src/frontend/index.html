@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Goodminton</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Badminton Clear Classification</h1>
+
+    <section>
+      <label for="video-input">Upload video</label>
+      <input id="video-input" type="file" accept="video/*" />
+    </section>
+
+    <section>
+      <label for="model-select">Choose model</label>
+      <select id="model-select">
+        <option value="svm">SVM</option>
+        <option value="lr_pca">Logistic + PCA</option>
+      </select>
+    </section>
+
+    <section>
+      <button id="submit-btn">Predict</button>
+    </section>
+
+    <section>
+      <div id="result" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

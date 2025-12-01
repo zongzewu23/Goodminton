@@ -1,0 +1,8 @@
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+main { max-width: 720px; }
+section { margin: 12px 0; }
+button { padding: 8px 12px; }
+
+.result-correct { color: green; font-weight: bold; }
+.result-incorrect { color: red; font-weight: bold; }
+.result-evaluating { color: #f1c40f; font-weight: bold; } /* yellow */

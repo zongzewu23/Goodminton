@@ -10,8 +10,6 @@ import numpy as np
 import pandas as pd
 
 
-
-# 只使用“身体 + 四肢”的关键点：肩、肘、腕、髋、膝、踝、脚跟、脚尖
 USED_LANDMARKS: List[str] = [
     "left_shoulder", "right_shoulder",
     "left_elbow", "right_elbow",
@@ -23,18 +21,14 @@ USED_LANDMARKS: List[str] = [
     "left_foot_index", "right_foot_index",
 ]
 
-# 使用哪些坐标分量：一般 x, y, z 就够了，visibility 暂时不用
 USED_COORDS: List[str] = ["x", "y", "z"]
 
-# 主动作窗口目标长度（帧数），假设已用 30 fps 提取
 WINDOW_SECONDS: float = 1.5
 ASSUMED_FPS: int = 30
-WINDOW_FRAMES: int = int(WINDOW_SECONDS * ASSUMED_FPS)  # 约 45 帧
+WINDOW_FRAMES: int = int(WINDOW_SECONDS * ASSUMED_FPS)  # around 45 frames
 
-# 最终统一的帧数（时间归一化后）
 TARGET_FRAMES: int = 30
 
-# 把时间序列切成几段，保留“顺序信息”
 N_SEGMENTS: int = 5
 
 
@@ -45,10 +39,8 @@ class VideoFeatureSample:
     feature_vector: np.ndarray  # shape (num_features,)
 
 
-# ---- 辅助函数：列名构造 / 安全检查 ----
-
 def get_landmark_columns() -> List[str]:
-    """根据 USED_LANDMARKS + USED_COORDS 构造列名列表。"""
+    """Build the column names from USED_LANDMARKS and USED_COORDS."""
     cols = []
     for lm in USED_LANDMARKS:
         for coord in USED_COORDS:
@@ -65,11 +57,9 @@ def check_columns_exist(df: pd.DataFrame, columns: List[str]) -> None:
         )
 
 
-# ---- 时间序列处理：运动能量 / 主窗口提取 / 插值 ----
-
 def compute_motion_energy(seq: np.ndarray) -> np.ndarray:
     """
-    计算相邻帧之间的“运动能量”（速度平方和），用于找动作最激烈的区间。
+    Compute motion energy (sum of squared velocities) between consecutive frames to locate the most intense interval.
     seq: shape (T, D)
     return: shape (T-1,)
     """
@@ -85,19 +75,19 @@ def find_main_motion_window(
     window_frames: int = WINDOW_FRAMES,
 ) -> np.ndarray:
     """
-    在整段时间序列中，找到“运动能量”最大的窗口。
+    Find the window with the maximum motion energy within the whole sequence.
     seq: shape (T, D)
     return: sub_seq: shape (M, D), M <= T
     """
     T = seq.shape[0]
     if T <= window_frames:
-        # 视频本身就很短，那就直接用全部
+        # If the video is short, use the whole sequence
         return seq
 
     motion = compute_motion_energy(seq)  # (T-1,)
 
-    # 使用滑动窗口在 motion 上求和，找能量最大的一段
-    w = window_frames - 1  # 运动能量长度是 T-1
+    # Use a sliding window to sum motion energy and find the highest-energy segment
+    w = window_frames - 1  # motion energy length is T-1
     if w <= 0 or w > motion.shape[0]:
         return seq
 
@@ -116,7 +106,7 @@ def resample_sequence(
     target_len: int = TARGET_FRAMES,
 ) -> np.ndarray:
     """
-    把时间序列插值到固定长度 target_len。
+    Interpolate the time series to a fixed length target_len.
     seq: shape (T, D)
     return: shape (target_len, D)
     """
@@ -135,22 +125,20 @@ def resample_sequence(
     return out
 
 
-# ---- 特征提取：分段统计 / 速度等 ----
-
 def extract_segment_features(segment: np.ndarray) -> np.ndarray:
     """
-    对单个时间段 segment 提取统计特征。
+    Extract statistical features for a single time segment.
     segment: shape (L, D)
     return: shape (D * num_stats,)
-    统计特征包括：
+    Statistics include:
       - mean, max, min, std
-      - delta_pos (最后一帧 - 第一帧)
+      - delta_pos (last frame - first frame)
       - mean_speed, max_speed
-    共 7 个统计量。
+    Total 7 statistics.
     """
     L, D = segment.shape
     if L < 2:
-        # 不足两帧，速度没法算，简单兜底
+        # Fewer than 2 frames: cannot compute speed; simple fallback
         mean = segment.mean(axis=0)
         return np.concatenate([mean, mean, mean, mean, np.zeros_like(mean), np.zeros_like(mean), np.zeros_like(mean)])
 
@@ -166,7 +154,7 @@ def extract_segment_features(segment: np.ndarray) -> np.ndarray:
     mean_speed = speed.mean(axis=0)        # (D,)
     max_speed = speed.max(axis=0)          # (D,)
 
-    # 按固定顺序拼接：方便模型学习“对应维度”的规律
+    # Concatenate in a fixed order to help the model learn per-dimension patterns
     stats = np.concatenate(
         [pos_mean, pos_max, pos_min, pos_std, delta_pos, mean_speed, max_speed],
         axis=0
@@ -179,14 +167,14 @@ def sequence_to_feature_vector(
     n_segments: int = N_SEGMENTS,
 ) -> np.ndarray:
     """
-    把统一长度的时间序列 seq (T, D) 压成一维特征向量。
-    - 把时间轴均分成 n_segments 段
-    - 每段提取统计特征
-    - 按段顺序拼接
+    Flatten the normalized sequence seq (T, D) into a 1D feature vector.
+    - Evenly split the time axis into n_segments
+    - Extract statistics for each segment
+    - Concatenate in segment order
     """
     T, D = seq.shape
     if T < n_segments:
-        # 极端情况：帧数比段数还少，直接扩展重复最后一帧
+        # Edge case: frames fewer than segments; pad by repeating the last frame
         repeats = n_segments - T
         pad = np.repeat(seq[-1:, :], repeats, axis=0)
         seq = np.concatenate([seq, pad], axis=0)
@@ -197,7 +185,7 @@ def sequence_to_feature_vector(
 
     for i in range(n_segments):
         start = i * base_len
-        # 最后一段吃掉所有剩余帧，避免尾巴丢帧
+        # Last segment consumes all remaining frames to avoid dropping tail frames
         if i == n_segments - 1:
             end = T
         else:
@@ -211,13 +199,11 @@ def sequence_to_feature_vector(
     return full_feature.astype(np.float32)
 
 
-# ---- 主入口：从 features.csv / labels.csv 构造 X, y ----
-
 def load_features_and_labels(
     features_path: Path,
     labels_path: Path,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """读取 CSV 并做基本检查。"""
+    """Read CSV files and perform basic checks."""
     features_df = pd.read_csv(features_path)
     labels_df = pd.read_csv(labels_path)
 
@@ -234,7 +220,7 @@ def load_features_and_labels(
 
 
 def label_str_to_int(label_str: str) -> int:
-    """把 'correct' / 'incorrect' 映射为 1 / 0。"""
+    """Map 'correct' / 'incorrect' to 1 / 0."""
     label_str = str(label_str).strip().lower()
     if label_str == "correct":
         return 1
@@ -249,11 +235,11 @@ def build_video_feature_samples(
     labels_df: pd.DataFrame,
 ) -> List[VideoFeatureSample]:
     """
-    核心函数：按视频聚合，构造每个视频的 feature vector。
+    Core function: group by video and construct a feature vector per video.
     """
     lm_cols = get_landmark_columns()
 
-    # 建一个 video_name -> label_int 的映射
+    # Build a mapping: video_name -> label_int
     label_map: Dict[str, int] = {
         row["video_name"]: label_str_to_int(row["label"])
         for _, row in labels_df.iterrows()
@@ -261,12 +247,12 @@ def build_video_feature_samples(
 
     samples: List[VideoFeatureSample] = []
 
-    # 按 video_name 分组
+    # Group by video_name
     grouped = features_df.groupby("video_name", sort=False)
 
     for video_name, df_group in grouped:
         if video_name not in label_map:
-            # 没有标签的样本（比如 test 视频），先跳过
+            # Skip samples without labels (e.g., test videos)
             continue
 
         df_group = df_group.sort_values("frame_idx")
@@ -276,13 +262,13 @@ def build_video_feature_samples(
             print(f"[WARN] Video {video_name} has no frames after filtering, skip.")
             continue
 
-        # 1) 找主动作窗口
+        # 1) Find main motion window
         window_seq = find_main_motion_window(seq, window_frames=WINDOW_FRAMES)
 
-        # 2) 插值归一化到固定帧数
+        # 2) Resample to a fixed frame count
         norm_seq = resample_sequence(window_seq, target_len=TARGET_FRAMES)
 
-        # 3) 分段提特征
+        # 3) Extract segment features
         feature_vec = sequence_to_feature_vector(norm_seq, n_segments=N_SEGMENTS)
 
         samples.append(
@@ -301,11 +287,12 @@ def build_dataset_from_csv(
     labels_path: Path,
 ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
     """
-    一步到位：
-      - 读 CSV
-      - 按视频聚合并提特征
-      - 输出 X, y, video_names
+    All-in-one:
+      - Read CSV
+      - Group by video and extract features
+      - Output X, y, video_names
     """
+
     features_df, labels_df = load_features_and_labels(features_path, labels_path)
     samples = build_video_feature_samples(features_df, labels_df)
 
