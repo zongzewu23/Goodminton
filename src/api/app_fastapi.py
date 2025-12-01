@@ -26,8 +26,9 @@ async def serve_index():
 @app.post("/api/predict-clear")
 async def predict_clear(file: UploadFile = File(...), model: str = Form("svm")):
     # Validate model choice
-    if model not in ("svm", "lr_pca"):
-        raise HTTPException(status_code=400, detail="Invalid model")
+    allowed_models = {"svm", "lr_pca", "rf", "rnn", "dtw_kbb"}
+    if model not in allowed_models:
+        raise HTTPException(status_code=400, detail=f"Invalid model. Allowed: {sorted(allowed_models)}")
 
     # Persist the uploaded video temporarily for processing
     suffix = Path(file.filename).suffix or ".mp4"
